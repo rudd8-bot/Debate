@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenRouter LLM Debate</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+KR:wght@300;400;500;700&family=Fira+Code:wght@400;500&display=swap');
+
+:root {
+  --bg: #070a0f;
+  --surface: #0c1018;
+  --surface2: #111820;
+  --border: #1a2535;
+  --accent: #38bdf8;
+  --accent2: #a78bfa;
+  --accent3: #34d399;
+  --text: #d0e0f0;
+  --muted: #3a5070;
+  --font-display: 'Orbitron', monospace;
+  --font-body: 'Noto Sans KR', sans-serif;
+  --font-mono: 'Fira Code', monospace;
+  --sidebar-w: 240px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  min-height: 100vh;
+  display: flex;
+}
+
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse 50% 40% at 15% 20%, rgba(56,189,248,0.05) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 85% 80%, rgba(167,139,250,0.05) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 30% at 50% 50%, rgba(52,211,153,0.03) 0%, transparent 60%);
+  pointer-events: none; z-index: 0;
+}
+
+/* SIDEBAR */
+.sidebar {
+  width: var(--sidebar-w);
+  min-height: 100vh;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  position: fixed; left: 0; top: 0; bottom: 0;
+  z-index: 10; transition: transform 0.25s;
+}
+
+.sidebar-head {
+  padding: 16px 14px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+
+.sidebar-title {
+  font-family: var(--font-display);
+  font-size: 0.58rem; letter-spacing: 0.18em; color: var(--muted); text-transform: uppercase;
+}
+
+.new-btn {
+  background: var(--border); border: none; color: var(--text);
+  font-family: var(--font-mono); font-size: 0.64rem;
+  padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: background 0.15s;
+}
+.new-btn:hover { background: var(--muted); }
+
+.history-list { flex: 1; overflow-y: auto; padding: 8px 0; }
+
+.hist-item {
+  padding: 10px 14px; cursor: pointer;
+  border-left: 2px solid transparent; transition: all 0.15s; position: relative;
+}
+.hist-item:hover { background: var(--surface2); }
+.hist-item.active { border-left-color: var(--accent); background: var(--surface2); }
+
+.hist-topic { font-size: 0.77rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+.hist-meta { font-family: var(--font-mono); font-size: 0.55rem; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.hist-models { display: flex; gap: 3px; }
+.hist-dot { width: 5px; height: 5px; border-radius: 50%; }
+
+.hist-del {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  font-size: 0.7rem; opacity: 0; transition: opacity 0.15s; padding: 3px 5px;
+}
+.hist-item:hover .hist-del { opacity: 1; }
+.hist-del:hover { color: #ff6666; }
+
+.sidebar-empty { padding: 24px 14px; font-family: var(--font-mono); font-size: 0.6rem; color: var(--muted); text-align: center; line-height: 1.9; }
+
+.sidebar-footer { padding: 12px 14px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+.export-btn { background: none; border: 1px solid var(--border); color: var(--muted); font-family: var(--font-mono); font-size: 0.59rem; padding: 7px 10px; border-radius: 4px; cursor: pointer; text-align: left; transition: all 0.15s; }
+.export-btn:hover { border-color: var(--muted); color: var(--text); }
+
+.sidebar-toggle { display: none; position: fixed; top: 12px; left: 12px; z-index: 20; background: var(--surface); border: 1px solid var(--border); color: var(--text); font-size: 1rem; padding: 6px 11px; border-radius: 6px; cursor: pointer; }
+
+/* MAIN */
+.main { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; position: relative; z-index: 1; }
+.wrap { max-width: 900px; margin: 0 auto; padding: 0 16px 80px; }
+
+header { padding: 28px 0 18px; text-align: center; border-bottom: 1px solid var(--border); }
+
+.or-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(56,189,248,0.1); border: 1px solid rgba(56,189,248,0.25);
+  border-radius: 20px; padding: 4px 14px; margin-bottom: 10px;
+  font-family: var(--font-mono); font-size: 0.62rem; color: var(--accent); letter-spacing: 0.1em;
+}
+.or-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: blink 1.5s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+h1 { font-family: var(--font-display); font-size: 1.9rem; font-weight: 900; letter-spacing: 0.08em; line-height: 1; }
+.tagline { font-family: var(--font-mono); font-size: 0.6rem; color: var(--muted); letter-spacing: 0.18em; margin-top: 5px; }
+
+/* SETUP */
+.setup-panel { background: var(--surface); border: 1px solid var(--border); padding: 24px; }
+
+.api-key-section { margin-bottom: 20px; }
+.section-label { font-family: var(--font-mono); font-size: 0.62rem; color: var(--muted); letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 8px; }
+
+.key-input-wrap { display: flex; gap: 10px; align-items: center; }
+input[type="password"], input[type="text"] {
+  flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text); font-family: var(--font-mono); font-size: 0.78rem;
+  padding: 10px 14px; outline: none; transition: border-color 0.2s;
+}
+input:focus { border-color: var(--accent); }
+input::placeholder { color: var(--muted); font-size: 0.68rem; }
+
+.key-hint { font-family: var(--font-mono); font-size: 0.58rem; color: var(--muted); margin-top: 6px; }
+.key-hint a { color: var(--accent); text-decoration: none; }
+.key-hint a:hover { text-decoration: underline; }
+
+/* Model selector grid */
+.model-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+
+.model-card {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px; cursor: pointer; transition: all 0.15s; position: relative;
+}
+.model-card:hover { border-color: var(--muted); }
+.model-card.selected { border-color: var(--accent); background: rgba(56,189,248,0.05); }
+.model-card.disabled-card { opacity: 0.4; }
+
+.model-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
+.model-name { font-family: var(--font-mono); font-size: 0.72rem; font-weight: 600; color: var(--text); }
+.model-badge {
+  font-family: var(--font-mono); font-size: 0.52rem; padding: 2px 7px; border-radius: 10px;
+  font-weight: 600; letter-spacing: 0.05em;
+}
+.badge-free { background: rgba(52,211,153,0.15); color: var(--accent3); border: 1px solid rgba(52,211,153,0.3); }
+.badge-paid { background: rgba(251,191,36,0.1); color: #fbbf24; border: 1px solid rgba(251,191,36,0.25); }
+
+.model-desc { font-family: var(--font-mono); font-size: 0.58rem; color: var(--muted); line-height: 1.5; }
+.model-perf { font-size: 0.6rem; color: var(--muted); margin-top: 4px; }
+
+.check-icon {
+  position: absolute; top: 10px; right: 10px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--accent); display: flex; align-items: center; justify-content: center;
+  font-size: 0.55rem; color: #000; opacity: 0; transition: opacity 0.15s;
+}
+.model-card.selected .check-icon { opacity: 1; }
+
+.slot-label { font-family: var(--font-mono); font-size: 0.62rem; color: var(--muted); margin-bottom: 8px; letter-spacing: 0.1em; }
+.slot-info { font-family: var(--font-mono); font-size: 0.6rem; color: var(--muted); margin-bottom: 14px; line-height: 1.7; }
+
+.slots-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+
+.slot-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+.slot-title { font-family: var(--font-mono); font-size: 0.6rem; color: var(--muted); margin-bottom: 8px; letter-spacing: 0.1em; }
+
+select {
+  width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 5px;
+  color: var(--text); font-family: var(--font-mono); font-size: 0.72rem;
+  padding: 8px 10px; outline: none; cursor: pointer; transition: border-color 0.2s;
+  appearance: none;
+}
+select:focus { border-color: var(--accent); }
+option { background: var(--bg); }
+
+.goto-btn {
+  width: 100%; background: var(--accent); border: none; color: #000;
+  font-family: var(--font-display); font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.15em; padding: 12px; border-radius: 6px; cursor: pointer;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.goto-btn:hover { opacity: 0.85; transform: translateY(-1px); }
+
+/* DEBATE */
+.debate-panel { background: var(--surface); border: 1px solid var(--border); border-top: none; padding: 20px; }
+
+.tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--surface); }
+.tab { flex: 1; padding: 13px; text-align: center; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.1em; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; user-select: none; }
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--text); border-bottom-color: var(--accent); }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+textarea {
+  width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text); font-family: var(--font-body); font-size: 0.9rem;
+  padding: 11px 13px; resize: vertical; min-height: 68px; outline: none;
+  transition: border-color 0.2s; line-height: 1.6;
+}
+textarea:focus { border-color: var(--accent); }
+
+.bottom-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.rounds-group { display: flex; align-items: center; gap: 7px; }
+.ctrl-label { font-family: var(--font-mono); font-size: 0.62rem; color: var(--muted); }
+
+.rnd-btn { background: var(--bg); border: 1px solid var(--border); color: var(--muted); font-family: var(--font-mono); font-size: 0.72rem; padding: 5px 12px; border-radius: 4px; cursor: pointer; transition: all 0.15s; }
+.rnd-btn.sel { background: var(--border); color: var(--text); border-color: var(--muted); }
+
+.start-btn { margin-left: auto; background: var(--accent); border: none; color: #000; font-family: var(--font-display); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em; padding: 9px 24px; border-radius: 5px; cursor: pointer; transition: opacity 0.15s, transform 0.15s; }
+.start-btn:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
+.start-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* active models display */
+.active-models { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.active-model-tag {
+  font-family: var(--font-mono); font-size: 0.6rem; padding: 4px 10px; border-radius: 4px;
+  border: 1px solid var(--border); color: var(--muted);
+}
+
+/* ARENA */
+.arena-wrap { margin-top: 20px; display: flex; flex-direction: column; gap: 12px; }
+
+.round-divider { display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 0.6rem; color: var(--muted); letter-spacing: 0.2em; text-transform: uppercase; }
+.round-divider::before, .round-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+.msg-card { display: grid; gap: 10px; opacity: 0; transform: translateY(10px); animation: fadeUp 0.3s ease forwards; }
+.msg-card.left  { grid-template-columns: 44px 1fr; }
+.msg-card.right { grid-template-columns: 1fr 44px; }
+
+@keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
+
+.avatar { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 0.55rem; font-weight: 700; flex-shrink: 0; align-self: flex-start; margin-top: 4px; text-align: center; line-height: 1.2; }
+
+.bubble { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 13px 15px; }
+.left  .bubble { border-left: 2px solid; }
+.right .bubble { border-right: 2px solid; }
+
+.bub-header { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 7px; display: flex; align-items: center; gap: 7px; }
+.bub-model-tag { font-size: 0.5rem; color: var(--muted); font-weight: 400; }
+.bub-body { font-size: 0.87rem; line-height: 1.75; color: var(--text); white-space: pre-wrap; }
+
+.think-card { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; }
+.dots { display: flex; gap: 4px; }
+.dots span { width: 6px; height: 6px; border-radius: 50%; animation: dotPulse 1.2s infinite; }
+.dots span:nth-child(2) { animation-delay: 0.2s; }
+.dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes dotPulse { 0%,60%,100%{opacity:0.25;transform:scale(0.8)} 30%{opacity:1;transform:scale(1)} }
+.think-label { font-family: var(--font-mono); font-size: 0.66rem; color: var(--muted); }
+
+.summary-card { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 18px; opacity: 0; transform: translateY(10px); animation: fadeUp 0.4s 0.1s ease forwards; }
+.summary-head { font-family: var(--font-display); font-size: 0.6rem; letter-spacing: 0.2em; color: var(--muted); margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
+.summary-head::after { content:''; flex:1; height:1px; background:var(--border); }
+.summary-body { font-size: 0.87rem; line-height: 1.8; color: var(--text); white-space: pre-wrap; }
+
+.error-box { background: rgba(255,60,60,0.07); border: 1px solid rgba(255,60,60,0.2); border-radius: 8px; padding: 12px 16px; font-family: var(--font-mono); font-size: 0.73rem; color: #ff7070; line-height: 1.6; }
+
+.toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; font-family: var(--font-mono); font-size: 0.7rem; color: var(--accent3); opacity: 0; transform: translateY(10px); transition: all 0.3s; z-index: 100; pointer-events: none; }
+.toast.show { opacity: 1; transform: translateY(0); }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+@media (max-width: 700px) {
+  .sidebar { transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-toggle { display: block; }
+  .main { margin-left: 0; }
+  .model-grid { grid-template-columns: 1fr; }
+  .slots-row { grid-template-columns: 1fr; }
+  h1 { font-size: 1.5rem; }
+}
+</style>
+</head>
+<body>
+
+<div class="sidebar" id="sidebar">
+  <div class="sidebar-head">
+    <span class="sidebar-title">// 토론 기록</span>
+    <button class="new-btn" onclick="newDebate()">+ 새 토론</button>
+  </div>
+  <div class="history-list" id="historyList">
+    <div class="sidebar-empty">아직 토론 기록이 없어요.<br>첫 토론을 시작해보세요!</div>
+  </div>
+  <div class="sidebar-footer">
+    <button class="export-btn" onclick="exportAll()">📥 전체 기록 내보내기</button>
+    <button class="export-btn" onclick="exportCurrent()">📄 현재 토론 내보내기</button>
+  </div>
+</div>
+
+<button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
+
+<div class="main">
+<div class="wrap">
+
+  <header>
+    <div class="or-badge"><div class="or-dot"></div>OpenRouter · 무료 모델 지원</div>
+    <h1>FREE LLM DEBATE</h1>
+    <div class="tagline">// open models · one question · zero cost</div>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('setup')">⚙ 설정</div>
+    <div class="tab" onclick="switchTab('debate')">◉ 토론 시작</div>
+  </div>
+
+  <!-- SETUP -->
+  <div class="tab-panel active" id="panel-setup">
+    <div class="setup-panel">
+
+      <div class="api-key-section">
+        <div class="section-label">// OpenRouter API 키</div>
+        <div class="key-input-wrap">
+          <input type="password" id="or-key" placeholder="sk-or-v1-..." autocomplete="off">
+        </div>
+        <div class="key-hint">
+          <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a>에서 무료 발급 (구글 계정으로 가입)
+        </div>
+      </div>
+
+      <div class="section-label" style="margin-bottom:10px">// 토론 참가자 선택 (2개 이상)</div>
+      <div class="slot-info">🟢 FREE 모델은 완전 무료 · 🟡 PAID는 소액 과금</div>
+
+      <div class="model-grid" id="modelGrid">
+        <!-- populated by JS -->
+      </div>
+
+      <div class="slots-row">
+        <div class="slot-box">
+          <div class="slot-title">// 참가자 A (왼쪽)</div>
+          <select id="slot-a"></select>
+        </div>
+        <div class="slot-box">
+          <div class="slot-title">// 참가자 B (오른쪽)</div>
+          <select id="slot-b"></select>
+        </div>
+      </div>
+
+      <button class="goto-btn" onclick="goToDebate()">설정 완료 → 토론으로</button>
+      <div style="font-family:var(--font-mono);font-size:0.57rem;color:var(--muted);text-align:center;margin-top:10px;line-height:1.8;">
+        🔒 API 키는 이 기기 브라우저에만 저장됩니다. 서버로 전송되지 않습니다.
+      </div>
+    </div>
+  </div>
+
+  <!-- DEBATE -->
+  <div class="tab-panel" id="panel-debate">
+    <div class="debate-panel">
+      <div class="active-models" id="activeModels"></div>
+      <div class="section-label">// 토론 주제</div>
+      <textarea id="topic" placeholder="예) 인공지능은 인간의 창의성을 대체할 수 있는가?&#10;예) 민주주의는 최선의 정치 체제인가?&#10;예) 인터넷은 인류에게 득인가 실인가?"></textarea>
+      <div class="bottom-controls">
+        <div class="rounds-group">
+          <span class="ctrl-label">라운드</span>
+          <button class="rnd-btn sel" data-r="2">2</button>
+          <button class="rnd-btn" data-r="3">3</button>
+          <button class="rnd-btn" data-r="4">4</button>
+        </div>
+        <button class="start-btn" id="runBtn" onclick="runDebate()">▶ 토론 시작</button>
+      </div>
+      <div class="arena-wrap" id="arena"></div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Models ─────────────────────────────────────────────
+const AVAILABLE_MODELS = [
+  { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Llama 3.3 70B', maker: 'Meta', free: true,  perf: '★★★★☆', desc: '가장 추천 · 성능 우수', color: '#38bdf8' },
+  { id: 'google/gemma-3-27b-it:free',              name: 'Gemma 3 27B',   maker: 'Google', free: true,  perf: '★★★☆☆', desc: '구글 오픈소스', color: '#34d399' },
+  { id: 'mistralai/mistral-7b-instruct:free',      name: 'Mistral 7B',    maker: 'Mistral', free: true, perf: '★★★☆☆', desc: '빠르고 가벼움', color: '#a78bfa' },
+  { id: 'qwen/qwen-2.5-72b-instruct:free',         name: 'Qwen 2.5 72B',  maker: 'Alibaba', free: true, perf: '★★★★☆', desc: '다국어 강점', color: '#fb923c' },
+  { id: 'deepseek/deepseek-r1:free',               name: 'DeepSeek R1',   maker: 'DeepSeek', free: true, perf: '★★★★☆', desc: '추론 특화', color: '#f472b6' },
+  { id: 'anthropic/claude-3.5-haiku',              name: 'Claude 3.5 Haiku', maker: 'Anthropic', free: false, perf: '★★★★☆', desc: '빠른 Claude · 소액', color: '#da7756' },
+  { id: 'openai/gpt-4o-mini',                      name: 'GPT-4o Mini',   maker: 'OpenAI', free: false, perf: '★★★★☆', desc: '저렴한 GPT · 소액', color: '#19c37d' },
+  { id: 'google/gemini-flash-1.5',                 name: 'Gemini 1.5 Flash', maker: 'Google', free: false, perf: '★★★★☆', desc: '빠른 Gemini · 소액', color: '#4a90e2' },
+];
+
+// ── State ──────────────────────────────────────────────
+let rounds = 2;
+let running = false;
+let currentSessionId = null;
+let currentMessages = [];
+let slotA = AVAILABLE_MODELS[0].id;
+let slotB = AVAILABLE_MODELS[1].id;
+
+const STORE_KEY = 'or_debate_history';
+
+// ── Init UI ────────────────────────────────────────────
+function initModelGrid() {
+  const grid = document.getElementById('modelGrid');
+  grid.innerHTML = AVAILABLE_MODELS.map(m => `
+    <div class="model-card" id="mc-${m.id.replace(/[/:]/g,'_')}" onclick="selectModelInfo('${m.id}')">
+      <div class="check-icon">✓</div>
+      <div class="model-card-header">
+        <span class="model-name">${m.name}</span>
+        <span class="model-badge ${m.free?'badge-free':'badge-paid'}">${m.free?'FREE':'PAID'}</span>
+      </div>
+      <div class="model-desc">${m.maker} · ${m.desc}</div>
+      <div class="model-perf">${m.perf}</div>
+    </div>`).join('');
+
+  // Populate selects
+  ['slot-a','slot-b'].forEach((sid,i) => {
+    const sel = document.getElementById(sid);
+    sel.innerHTML = AVAILABLE_MODELS.map(m =>
+      `<option value="${m.id}" ${(i===0?slotA:slotB)===m.id?'selected':''}>${m.free?'🟢':'🟡'} ${m.name} (${m.maker})</option>`
+    ).join('');
+    sel.addEventListener('change', () => {
+      if (sid==='slot-a') slotA=sel.value; else slotB=sel.value;
+    });
+  });
+}
+
+function selectModelInfo(id) {
+  // just highlight info, actual selection via dropdown
+  document.querySelectorAll('.model-card').forEach(c => c.classList.remove('selected'));
+  const key = id.replace(/[/:]/g,'_');
+  document.getElementById('mc-'+key)?.classList.add('selected');
+}
+
+function updateActiveModels() {
+  const a = AVAILABLE_MODELS.find(m=>m.id===slotA);
+  const b = AVAILABLE_MODELS.find(m=>m.id===slotB);
+  document.getElementById('activeModels').innerHTML = [a,b].filter(Boolean).map(m=>
+    `<div class="active-model-tag" style="border-color:${m.color};color:${m.color}">${m.name}</div>`
+  ).join('');
+}
+
+// ── Storage ────────────────────────────────────────────
+function loadHistory() { try { return JSON.parse(localStorage.getItem(STORE_KEY)||'[]'); } catch { return []; } }
+function saveHistory(h) { try { localStorage.setItem(STORE_KEY, JSON.stringify(h)); } catch {} }
+
+function saveSession(topic, messages, models) {
+  const h = loadHistory();
+  const idx = h.findIndex(s=>s.id===currentSessionId);
+  const session = { id:currentSessionId, topic, models, date:new Date().toISOString(), messages };
+  if (idx>=0) h[idx]=session; else h.unshift(session);
+  saveHistory(h); renderHistory();
+}
+
+function deleteSession(id) {
+  saveHistory(loadHistory().filter(s=>s.id!==id));
+  if (currentSessionId===id) { currentSessionId=null; currentMessages=[]; document.getElementById('arena').innerHTML=''; document.getElementById('topic').value=''; }
+  renderHistory();
+}
+
+function renderHistory() {
+  const h = loadHistory();
+  const list = document.getElementById('historyList');
+  if (!h.length) { list.innerHTML='<div class="sidebar-empty">아직 토론 기록이 없어요.<br>첫 토론을 시작해보세요!</div>'; return; }
+  list.innerHTML = h.map(s => {
+    const d = new Date(s.date);
+    const ds = `${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+    return `<div class="hist-item ${s.id===currentSessionId?'active':''}" onclick="loadSession('${s.id}')">
+      <div class="hist-topic">${escHtml(s.topic)}</div>
+      <div class="hist-meta">${ds}</div>
+      <button class="hist-del" onclick="event.stopPropagation();deleteSession('${s.id}')">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function loadSession(id) {
+  const s = loadHistory().find(x=>x.id===id);
+  if (!s) return;
+  currentSessionId=id; currentMessages=s.messages||[];
+  document.getElementById('topic').value=s.topic;
+  renderHistory(); switchTab('debate');
+  const a = document.getElementById('arena'); a.innerHTML='';
+  s.messages.forEach(m => {
+    if (m.type==='divider') addDivider(m.round,m.total,true);
+    else if (m.type==='summary') addSummary(m.text,true);
+    else if (m.type==='message') addMessage(m.slot,m.modelId,m.text,m.round,true);
+  });
+  document.getElementById('sidebar').classList.remove('open');
+}
+
+function newDebate() {
+  currentSessionId=null; currentMessages=[];
+  document.getElementById('arena').innerHTML='';
+  document.getElementById('topic').value='';
+  renderHistory(); switchTab('debate');
+  document.getElementById('sidebar').classList.remove('open');
+}
+
+function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
+
+// ── Export ─────────────────────────────────────────────
+function sessionToText(s) {
+  let out=`=== FREE LLM DEBATE (OpenRouter) ===\n주제: ${s.topic}\n날짜: ${new Date(s.date).toLocaleString('ko-KR')}\n${'─'.repeat(40)}\n\n`;
+  s.messages.forEach(m => {
+    if (m.type==='divider') out+=`\n[ROUND ${m.round}]\n\n`;
+    else if (m.type==='message') {
+      const model = AVAILABLE_MODELS.find(x=>x.id===m.modelId);
+      out+=`[${model?.name||m.modelId}]\n${m.text}\n\n`;
+    }
+    else if (m.type==='summary') out+=`[종합 정리]\n${m.text}\n`;
+  });
+  return out;
+}
+function downloadText(content, filename) {
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([content],{type:'text/plain;charset=utf-8'}));
+  a.download=filename; a.click();
+}
+function exportAll() {
+  const h=loadHistory();
+  if (!h.length) { showToast('저장된 기록이 없어요'); return; }
+  downloadText(h.map(s=>sessionToText(s)).join('\n\n'+'='.repeat(50)+'\n\n'), `OR토론_전체기록.txt`);
+  showToast('✅ 전체 기록 내보내기 완료!');
+}
+function exportCurrent() {
+  if (!currentSessionId) { showToast('현재 토론이 없어요'); return; }
+  const s=loadHistory().find(x=>x.id===currentSessionId);
+  if (!s) return;
+  downloadText(sessionToText(s), `OR토론_${s.topic.slice(0,15)}.txt`);
+  showToast('✅ 내보내기 완료!');
+}
+function showToast(msg) {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+// ── Tabs ───────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['setup','debate'][i]===name));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+  if (name==='debate') updateActiveModels();
+}
+function goToDebate() {
+  slotA = document.getElementById('slot-a').value;
+  slotB = document.getElementById('slot-b').value;
+  if (slotA===slotB) { showToast('⚠ 서로 다른 모델을 선택해주세요'); return; }
+  switchTab('debate');
+}
+
+document.querySelectorAll('.rnd-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.rnd-btn').forEach(b=>b.classList.remove('sel'));
+    btn.classList.add('sel'); rounds=parseInt(btn.dataset.r);
+  });
+});
+
+// ── API call ───────────────────────────────────────────
+async function callOpenRouter(modelId, systemPrompt, messages) {
+  const key = document.getElementById('or-key').value.trim();
+  if (!key) throw new Error('OpenRouter API 키를 입력해주세요.');
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'Authorization':`Bearer ${key}`,
+      'HTTP-Referer':'https://rudd8-bot.github.io',
+      'X-Title':'LLM Debate Arena'
+    },
+    body: JSON.stringify({
+      model: modelId,
+      max_tokens: 1000,
+      messages: [{ role:'system', content:systemPrompt }, ...messages]
+    })
+  });
+  if (!res.ok) {
+    const e=await res.json().catch(()=>({}));
+    throw new Error(`${modelId}: ${e.error?.message||res.status}`);
+  }
+  const d=await res.json();
+  return d.choices[0].message.content;
+}
+
+// ── UI helpers ─────────────────────────────────────────
+function arena() { return document.getElementById('arena'); }
+
+const SLOT_COLORS = ['#38bdf8','#a78bfa'];
+
+function getModelColor(modelId) {
+  const m = AVAILABLE_MODELS.find(x=>x.id===modelId);
+  return m?.color || '#888';
+}
+
+function addDivider(r, total, replay=false) {
+  const el=document.createElement('div'); el.className='round-divider';
+  el.textContent=`ROUND ${r} of ${total}`; arena().appendChild(el);
+  if (!replay) currentMessages.push({type:'divider',round:r,total});
+}
+
+function showThinking(modelId) {
+  const color = getModelColor(modelId);
+  const m = AVAILABLE_MODELS.find(x=>x.id===modelId);
+  const el=document.createElement('div'); el.className='think-card'; el.id='thinking';
+  el.innerHTML=`<div class="dots"><span style="background:${color}"></span><span style="background:${color}"></span><span style="background:${color}"></span></div><span class="think-label">${m?.name||modelId} 생각 중...</span>`;
+  arena().appendChild(el);
+  el.scrollIntoView({behavior:'smooth',block:'end'});
+}
+function removeThinking() { const e=document.getElementById('thinking'); if(e)e.remove(); }
+
+function addMessage(slot, modelId, text, roundNum, replay=false) {
+  const color = getModelColor(modelId);
+  const m = AVAILABLE_MODELS.find(x=>x.id===modelId);
+  const isRight = slot==='b';
+  const el=document.createElement('div'); el.className=`msg-card ${isRight?'right':'left'}`;
+  const initials = (m?.name||modelId).split(' ').map(w=>w[0]).join('').slice(0,4);
+  const av=`<div class="avatar" style="background:${color}20;color:${color};border:1px solid ${color}40">${initials}</div>`;
+  const bubble=`<div class="bubble" style="border-${isRight?'right':'left'}-color:${color}"><div class="bub-header" style="color:${color}">${m?.name||modelId}<span class="bub-model-tag">${m?.maker||''}</span><span style="color:var(--muted);font-size:0.5rem;margin-left:auto">R${roundNum}</span></div><div class="bub-body">${escHtml(text)}</div></div>`;
+  el.innerHTML = isRight ? bubble+av : av+bubble;
+  arena().appendChild(el);
+  setTimeout(()=>el.scrollIntoView({behavior:'smooth',block:'end'}),50);
+  if (!replay) currentMessages.push({type:'message',slot,modelId,text,round:roundNum});
+}
+
+function addSummary(text, replay=false) {
+  const el=document.createElement('div'); el.className='summary-card';
+  el.innerHTML=`<div class="summary-head">종합 정리</div><div class="summary-body">${escHtml(text)}</div>`;
+  arena().appendChild(el);
+  setTimeout(()=>el.scrollIntoView({behavior:'smooth',block:'end'}),50);
+  if (!replay) currentMessages.push({type:'summary',text});
+}
+
+function addError(msg) {
+  const el=document.createElement('div'); el.className='error-box';
+  el.innerHTML=`⚠ 오류: ${escHtml(msg)}`; arena().appendChild(el);
+}
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── Main debate ────────────────────────────────────────
+function makeSystem(myName, otherName) {
+  return `당신은 ${myName}입니다. 주어진 토론 주제에 대해 논리적이고 비판적으로 분석하세요.
+상대방(${otherName})의 주장을 직접 언급하며 건설적으로 반박하거나 보완하세요.
+3~5문장으로 간결하게 한국어로 답변하세요.`;
+}
+
+async function runDebate() {
+  if (running) return;
+  const topic = document.getElementById('topic').value.trim();
+  if (!topic) { document.getElementById('topic').focus(); return; }
+
+  slotA = document.getElementById('slot-a')?.value || slotA;
+  slotB = document.getElementById('slot-b')?.value || slotB;
+
+  if (slotA===slotB) { showToast('⚠ 서로 다른 모델을 선택해주세요'); return; }
+
+  const mA = AVAILABLE_MODELS.find(x=>x.id===slotA);
+  const mB = AVAILABLE_MODELS.find(x=>x.id===slotB);
+
+  currentSessionId = Date.now().toString();
+  currentMessages = [];
+  running = true;
+  document.getElementById('runBtn').disabled = true;
+  arena().innerHTML = '';
+  updateActiveModels();
+
+  const histA = [], histB = [];
+  let lastA = '', lastB = '';
+
+  try {
+    for (let r=1; r<=rounds; r++) {
+      addDivider(r, rounds);
+
+      // Model A turn
+      let msgA = r===1
+        ? `토론 주제: "${topic}"\n\n이 주제에 대한 당신의 핵심 입장과 논거를 제시하세요.`
+        : `${mB.name}의 주장:\n"${lastB}"\n\n이에 응답하고 당신의 논거를 발전시키세요.`;
+      histA.push({role:'user',content:msgA});
+      showThinking(slotA);
+      lastA = await callOpenRouter(slotA, makeSystem(mA.name, mB.name), histA);
+      removeThinking();
+      histA.push({role:'assistant',content:lastA});
+      addMessage('a', slotA, lastA, r);
+
+      // Model B turn
+      let msgB = r===1
+        ? `토론 주제: "${topic}"\n\n${mA.name}의 초기 주장:\n"${lastA}"\n\n이에 반응하고 당신의 관점을 제시하세요.`
+        : `${mA.name}의 주장:\n"${lastA}"\n\n이에 응답하고 당신의 논거를 발전시키세요.`;
+      histB.push({role:'user',content:msgB});
+      showThinking(slotB);
+      lastB = await callOpenRouter(slotB, makeSystem(mB.name, mA.name), histB);
+      removeThinking();
+      histB.push({role:'assistant',content:lastB});
+      addMessage('b', slotB, lastB, r);
+    }
+
+    // Summary
+    const sumPrompt = `다음은 두 AI의 토론 최종 주장입니다:\n\n[${mA.name}]\n${lastA}\n\n[${mB.name}]\n${lastB}\n\n이 토론을 중립적으로 종합하고 균형 잡힌 결론을 4~6문장으로 정리해주세요.`;
+    showThinking(slotA);
+    const summary = await callOpenRouter(slotA, '당신은 공정한 토론 중재자입니다. 모든 관점을 종합해 균형 잡힌 결론을 도출합니다. 한국어로 답변하세요.', [{role:'user',content:sumPrompt}]);
+    removeThinking();
+    addSummary(summary);
+
+    saveSession(topic, currentMessages, [slotA, slotB]);
+    showToast('💾 토론이 자동 저장됐어요!');
+
+  } catch(err) {
+    removeThinking();
+    addError(err.message);
+  }
+
+  running = false;
+  document.getElementById('runBtn').disabled = false;
+}
+
+// ── Boot ───────────────────────────────────────────────
+initModelGrid();
+renderHistory();
+
+document.addEventListener('keydown', e => {
+  if (e.key==='Enter' && !e.shiftKey && document.activeElement.id==='topic') {
+    e.preventDefault(); runDebate();
+  }
+});
+</script>
+</body>
+</html>
