@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3-Way LLM Debate</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+KR:wght@300;400;500;700&family=Fira+Code:wght@400;500&display=swap');
+
+:root {
+  --bg: #070710;
+  --surface: #0e0e1c;
+  --surface2: #13132a;
+  --border: #1c1c3a;
+  --claude-color: #da7756;
+  --gpt-color: #19c37d;
+  --gemini-color: #4a90e2;
+  --text: #d8d8f0;
+  --text-dim: #5555880;
+  --muted: #444466;
+  --font-display: 'Orbitron', monospace;
+  --font-body: 'Noto Sans KR', sans-serif;
+  --font-mono: 'Fira Code', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  min-height: 100vh;
+}
+
+/* Animated bg */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 60% 40% at 20% 20%, rgba(218,119,86,0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 80% 80%, rgba(74,144,226,0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 30% at 50% 50%, rgba(25,195,125,0.04) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.wrap {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0 16px 80px;
+  position: relative;
+  z-index: 1;
+}
+
+/* HEADER */
+header {
+  padding: 36px 0 24px;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0;
+}
+
+.title-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 6px;
+}
+
+.title-badge {
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  letter-spacing: 0.25em;
+  padding: 4px 10px;
+  border-radius: 2px;
+  font-weight: 400;
+}
+.badge-claude { background: rgba(218,119,86,0.15); color: var(--claude-color); border: 1px solid rgba(218,119,86,0.3); }
+.badge-gpt    { background: rgba(25,195,125,0.15);  color: var(--gpt-color);    border: 1px solid rgba(25,195,125,0.3); }
+.badge-gemini { background: rgba(74,144,226,0.15);  color: var(--gemini-color); border: 1px solid rgba(74,144,226,0.3); }
+
+h1 {
+  font-family: var(--font-display);
+  font-size: 2.2rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: var(--text);
+  line-height: 1;
+}
+
+.tagline {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--muted);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-top: 6px;
+}
+
+/* TABS */
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.tab {
+  flex: 1;
+  padding: 14px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+  user-select: none;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--text); border-bottom-color: var(--claude-color); }
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* SETUP PANEL */
+.setup-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: none;
+  padding: 24px;
+}
+
+.setup-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.api-block {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  transition: border-color 0.2s;
+}
+.api-block.active-claude { border-color: rgba(218,119,86,0.4); }
+.api-block.active-gpt    { border-color: rgba(25,195,125,0.4); }
+.api-block.active-gemini { border-color: rgba(74,144,226,0.4); }
+
+.api-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.api-name {
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+.api-name.claude { color: var(--claude-color); }
+.api-name.gpt    { color: var(--gpt-color); }
+.api-name.gemini { color: var(--gemini-color); }
+
+.api-model {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--muted);
+}
+
+.toggle-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.toggle {
+  position: relative;
+  width: 32px; height: 17px;
+  cursor: pointer;
+}
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--border);
+  border-radius: 17px;
+  transition: 0.25s;
+}
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 11px; height: 11px;
+  left: 3px; top: 3px;
+  background: var(--muted);
+  border-radius: 50%;
+  transition: 0.25s;
+}
+.toggle input:checked + .toggle-slider { background: rgba(25,195,125,0.3); }
+.toggle input:checked + .toggle-slider::before {
+  transform: translateX(15px);
+  background: var(--gpt-color);
+}
+.toggle-label {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--muted);
+}
+
+input[type="password"], input[type="text"] {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 8px 10px;
+  outline: none;
+  transition: border-color 0.2s;
+  letter-spacing: 0.05em;
+}
+input:focus { border-color: var(--muted); }
+input::placeholder { color: var(--muted); font-size: 0.65rem; }
+
+.key-hint {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--muted);
+  margin-top: 5px;
+}
+.key-hint a { color: var(--muted); text-decoration: underline; }
+
+/* DEBATE PANEL */
+.debate-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: none;
+  padding: 24px;
+}
+
+.topic-section { margin-bottom: 20px; }
+
+.section-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--muted);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+textarea {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  padding: 12px 14px;
+  resize: vertical;
+  min-height: 72px;
+  outline: none;
+  transition: border-color 0.2s;
+  line-height: 1.6;
+}
+textarea:focus { border-color: var(--muted); }
+
+.bottom-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rounds-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ctrl-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--muted);
+  letter-spacing: 0.1em;
+}
+
+.rnd-btn {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 5px 13px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.rnd-btn.sel { background: var(--border); color: var(--text); border-color: var(--muted); }
+.rnd-btn:hover:not(.sel) { border-color: var(--muted); }
+
+.start-btn {
+  margin-left: auto;
+  background: var(--claude-color);
+  border: none;
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  padding: 10px 28px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.start-btn:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
+.start-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* ARENA */
+.arena-wrap {
+  margin-top: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.round-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--muted);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+.round-divider::before, .round-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.msg-card {
+  display: grid;
+  gap: 10px;
+  opacity: 0;
+  transform: translateY(10px);
+  animation: fadeUp 0.3s ease forwards;
+}
+.msg-card.claude-card { grid-template-columns: 44px 1fr; }
+.msg-card.gpt-card    { grid-template-columns: 1fr 44px; }
+.msg-card.gemini-card { grid-template-columns: 44px 1fr; }
+
+@keyframes fadeUp {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.avatar {
+  width: 44px; height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 4px;
+}
+.av-claude { background: rgba(218,119,86,0.12); color: var(--claude-color); border: 1px solid rgba(218,119,86,0.25); }
+.av-gpt    { background: rgba(25,195,125,0.12);  color: var(--gpt-color);    border: 1px solid rgba(25,195,125,0.25); }
+.av-gemini { background: rgba(74,144,226,0.12);  color: var(--gemini-color); border: 1px solid rgba(74,144,226,0.25); }
+
+.bubble {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.claude-card .bubble { border-left: 2px solid var(--claude-color); }
+.gpt-card    .bubble { border-right: 2px solid var(--gpt-color); }
+.gemini-card .bubble { border-left: 2px solid var(--gemini-color); }
+
+.bub-header {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.claude-card .bub-header { color: var(--claude-color); }
+.gpt-card    .bub-header { color: var(--gpt-color); }
+.gemini-card .bub-header { color: var(--gemini-color); }
+
+.bub-model {
+  font-size: 0.55rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.bub-body {
+  font-size: 0.88rem;
+  line-height: 1.75;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+/* Thinking */
+.think-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.dots {
+  display: flex;
+  gap: 4px;
+}
+.dots span {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  animation: dotPulse 1.2s infinite;
+}
+.dots span:nth-child(2) { animation-delay: 0.2s; }
+.dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes dotPulse {
+  0%,60%,100% { opacity:0.25; transform:scale(0.8); }
+  30% { opacity:1; transform:scale(1); }
+}
+
+.think-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+/* Summary */
+.summary-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  opacity: 0;
+  transform: translateY(10px);
+  animation: fadeUp 0.4s 0.1s ease forwards;
+}
+.summary-head {
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  color: var(--muted);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.summary-head::after { content:''; flex:1; height:1px; background:var(--border); }
+
+.summary-tri {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.tri-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+}
+
+.summary-body {
+  font-size: 0.88rem;
+  line-height: 1.8;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.error-box {
+  background: rgba(255,60,60,0.07);
+  border: 1px solid rgba(255,60,60,0.2);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: #ff7070;
+  line-height: 1.6;
+}
+
+/* Status bar */
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+.status-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  animation: dotPulse 1.5s infinite;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="title-line">
+      <span class="title-badge badge-claude">Claude</span>
+      <span class="title-badge badge-gpt">GPT-4o</span>
+      <span class="title-badge badge-gemini">Gemini</span>
+    </div>
+    <h1>TRI-LLM DEBATE</h1>
+    <div class="tagline">// three minds · one question · zero copying</div>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('setup')">⚙ API 설정</div>
+    <div class="tab" onclick="switchTab('debate')" id="debateTab">◉ 토론 시작</div>
+  </div>
+
+  <!-- SETUP TAB -->
+  <div class="tab-panel active" id="panel-setup">
+    <div class="setup-panel">
+      <div class="setup-grid">
+
+        <!-- Claude -->
+        <div class="api-block" id="block-claude">
+          <div class="api-header">
+            <div>
+              <div class="api-name claude">CLAUDE</div>
+              <div class="api-model">claude-sonnet-4-20250514</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="toggle-claude" checked onchange="toggleModel('claude')">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <input type="password" id="key-claude" placeholder="sk-ant-api03-..." autocomplete="off">
+          <div class="key-hint">
+            <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a>에서 발급
+          </div>
+        </div>
+
+        <!-- GPT -->
+        <div class="api-block" id="block-gpt">
+          <div class="api-header">
+            <div>
+              <div class="api-name gpt">GPT-4o</div>
+              <div class="api-model">gpt-4o</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="toggle-gpt" checked onchange="toggleModel('gpt')">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <input type="password" id="key-gpt" placeholder="sk-proj-..." autocomplete="off">
+          <div class="key-hint">
+            <a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com</a>에서 발급
+          </div>
+        </div>
+
+        <!-- Gemini -->
+        <div class="api-block" id="block-gemini">
+          <div class="api-header">
+            <div>
+              <div class="api-name gemini">GEMINI</div>
+              <div class="api-model">gemini-2.0-flash</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="toggle-gemini" checked onchange="toggleModel('gemini')">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <input type="password" id="key-gemini" placeholder="AIza..." autocomplete="off">
+          <div class="key-hint">
+            <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com</a>에서 발급
+          </div>
+        </div>
+
+      </div>
+
+      <div style="text-align:center;">
+        <button class="start-btn" onclick="goToDebate()" style="background:var(--muted);">
+          설정 완료 → 토론으로
+        </button>
+      </div>
+      <div style="font-family:var(--font-mono);font-size:0.6rem;color:var(--muted);text-align:center;margin-top:12px;line-height:1.7;">
+        🔒 API 키는 브라우저 메모리에만 저장됩니다. 서버로 전송되지 않습니다.<br>
+        최소 2개 이상의 모델을 활성화해야 토론이 시작됩니다.
+      </div>
+    </div>
+  </div>
+
+  <!-- DEBATE TAB -->
+  <div class="tab-panel" id="panel-debate">
+    <div class="debate-panel">
+      <div class="topic-section">
+        <div class="section-label">// 토론 주제</div>
+        <textarea id="topic" placeholder="예) 인공지능은 인간의 일자리를 빼앗는가?&#10;예) 어떤 프로그래밍 언어를 먼저 배워야 하나?&#10;예) 짧은 동영상 콘텐츠는 집중력을 해치는가?"></textarea>
+      </div>
+      <div class="bottom-controls">
+        <div class="rounds-group">
+          <span class="ctrl-label">라운드</span>
+          <button class="rnd-btn sel" data-r="2">2</button>
+          <button class="rnd-btn" data-r="3">3</button>
+          <button class="rnd-btn" data-r="4">4</button>
+        </div>
+        <button class="start-btn" id="runBtn" onclick="runDebate()">▶ 토론 시작</button>
+      </div>
+
+      <div class="arena-wrap" id="arena"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────
+let rounds = 2;
+let running = false;
+const enabled = { claude: true, gpt: true, gemini: true };
+
+// ── Tabs ───────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    t.classList.toggle('active', ['setup','debate'][i] === name);
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+}
+
+function goToDebate() {
+  switchTab('debate');
+}
+
+// ── Toggle models ──────────────────────────────────────
+function toggleModel(m) {
+  enabled[m] = document.getElementById('toggle-'+m).checked;
+  const block = document.getElementById('block-'+m);
+  block.style.opacity = enabled[m] ? '1' : '0.4';
+}
+
+// ── Round selector ─────────────────────────────────────
+document.querySelectorAll('.rnd-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.rnd-btn').forEach(b => b.classList.remove('sel'));
+    btn.classList.add('sel');
+    rounds = parseInt(btn.dataset.r);
+  });
+});
+
+// ── Model configs ──────────────────────────────────────
+const MODELS = {
+  claude: {
+    name: 'CLAUDE',
+    subname: 'claude-sonnet-4-20250514',
+    color: 'var(--claude-color)',
+    avClass: 'av-claude',
+    cardClass: 'claude-card',
+    avatarText: 'CLD',
+    system: `당신은 CLAUDE입니다. 철학적이고 신중한 분석가로, 복잡한 문제를 다각도로 바라봅니다.
+다른 AI들(GPT, Gemini)의 주장을 직접 언급하며 건설적으로 반박하거나 보완하세요.
+3~5문장으로 간결하게 한국어로 답변하세요.`
+  },
+  gpt: {
+    name: 'GPT-4o',
+    subname: 'gpt-4o',
+    color: 'var(--gpt-color)',
+    avClass: 'av-gpt',
+    cardClass: 'gpt-card',
+    avatarText: 'GPT',
+    system: `당신은 GPT-4o입니다. 실용적이고 데이터 중심의 사고를 하는 AI입니다.
+다른 AI들(Claude, Gemini)의 주장을 직접 언급하며 사실 기반으로 반박하거나 확장하세요.
+3~5문장으로 간결하게 한국어로 답변하세요.`
+  },
+  gemini: {
+    name: 'GEMINI',
+    subname: 'gemini-2.0-flash',
+    color: 'var(--gemini-color)',
+    avClass: 'av-gemini',
+    cardClass: 'gemini-card',
+    avatarText: 'GEM',
+    system: `당신은 GEMINI입니다. 창의적이고 미래지향적인 시각을 가진 AI입니다.
+다른 AI들(Claude, GPT)의 주장을 직접 언급하며 새로운 프레임이나 관점을 제시하세요.
+3~5문장으로 간결하게 한국어로 답변하세요.`
+  }
+};
+
+// ── API callers ────────────────────────────────────────
+async function callClaude(apiKey, systemPrompt, messages) {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      system: systemPrompt,
+      messages
+    })
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(`Claude: ${e.error?.message || res.status}`);
+  }
+  const d = await res.json();
+  return d.content.map(b => b.text || '').join('');
+}
+
+async function callGPT(apiKey, systemPrompt, messages) {
+  const msgs = [{ role: 'system', content: systemPrompt }, ...messages];
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o',
+      max_tokens: 1000,
+      messages: msgs
+    })
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(`GPT: ${e.error?.message || res.status}`);
+  }
+  const d = await res.json();
+  return d.choices[0].message.content;
+}
+
+async function callGemini(apiKey, systemPrompt, messages) {
+  // Convert to Gemini format
+  const contents = messages.map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }]
+  }));
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents,
+      generationConfig: { maxOutputTokens: 1000 }
+    })
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(`Gemini: ${e.error?.message || res.status}`);
+  }
+  const d = await res.json();
+  return d.candidates[0].content.parts.map(p => p.text).join('');
+}
+
+async function callModel(modelId, messages) {
+  const cfg = MODELS[modelId];
+  const key = document.getElementById('key-' + modelId).value.trim();
+  if (!key) throw new Error(`${cfg.name} API 키가 없습니다. 설정 탭에서 입력해주세요.`);
+  if (modelId === 'claude')  return callClaude(key, cfg.system, messages);
+  if (modelId === 'gpt')     return callGPT(key, cfg.system, messages);
+  if (modelId === 'gemini')  return callGemini(key, cfg.system, messages);
+}
+
+// ── UI helpers ─────────────────────────────────────────
+function arena() { return document.getElementById('arena'); }
+
+function addDivider(r, total) {
+  const el = document.createElement('div');
+  el.className = 'round-divider';
+  el.textContent = `ROUND ${r} of ${total}`;
+  arena().appendChild(el);
+}
+
+function showThinking(modelId) {
+  const cfg = MODELS[modelId];
+  const el = document.createElement('div');
+  el.className = 'think-card';
+  el.id = 'thinking';
+  el.innerHTML = `
+    <div class="dots">
+      <span style="background:${cfg.color}"></span>
+      <span style="background:${cfg.color}"></span>
+      <span style="background:${cfg.color}"></span>
+    </div>
+    <span class="think-label">${cfg.name} 생각 중...</span>
+  `;
+  arena().appendChild(el);
+  el.scrollIntoView({ behavior: 'smooth', block: 'end' });
+}
+
+function removeThinking() {
+  const el = document.getElementById('thinking');
+  if (el) el.remove();
+}
+
+function addMessage(modelId, text, roundNum) {
+  const cfg = MODELS[modelId];
+  const el = document.createElement('div');
+  el.className = `msg-card ${cfg.cardClass}`;
+  const av = `<div class="avatar ${cfg.avClass}">${cfg.avatarText}</div>`;
+  const bubble = `
+    <div class="bubble">
+      <div class="bub-header">
+        ${cfg.name}
+        <span class="bub-model">${cfg.subname}</span>
+        <span style="color:var(--muted);font-size:0.55rem;margin-left:auto">R${roundNum}</span>
+      </div>
+      <div class="bub-body">${escHtml(text)}</div>
+    </div>`;
+
+  // GPT on the right
+  el.innerHTML = modelId === 'gpt'
+    ? bubble + av
+    : av + bubble;
+
+  arena().appendChild(el);
+  setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'end' }), 50);
+}
+
+function addSummary(text) {
+  const el = document.createElement('div');
+  el.className = 'summary-card';
+  el.innerHTML = `
+    <div class="summary-head">
+      <div class="summary-tri">
+        <div class="tri-dot" style="background:var(--claude-color)"></div>
+        <div class="tri-dot" style="background:var(--gpt-color)"></div>
+        <div class="tri-dot" style="background:var(--gemini-color)"></div>
+      </div>
+      종합 정리
+    </div>
+    <div class="summary-body">${escHtml(text)}</div>`;
+  arena().appendChild(el);
+  setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'end' }), 50);
+}
+
+function addError(msg) {
+  const el = document.createElement('div');
+  el.className = 'error-box';
+  el.innerHTML = `⚠ 오류: ${escHtml(msg)}`;
+  arena().appendChild(el);
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Main debate logic ──────────────────────────────────
+async function runDebate() {
+  if (running) return;
+
+  const topic = document.getElementById('topic').value.trim();
+  if (!topic) { document.getElementById('topic').focus(); return; }
+
+  const active = ['claude','gpt','gemini'].filter(m => enabled[m]);
+  if (active.length < 2) {
+    alert('최소 2개 이상의 모델을 활성화해주세요.');
+    return;
+  }
+
+  running = true;
+  document.getElementById('runBtn').disabled = true;
+  arena().innerHTML = '';
+
+  // Each model maintains its own message history
+  const histories = {};
+  active.forEach(m => histories[m] = []);
+  const lastTexts = {};
+
+  try {
+    for (let r = 1; r <= rounds; r++) {
+      addDivider(r, rounds);
+
+      for (const modelId of active) {
+        const cfg = MODELS[modelId];
+        const others = active.filter(x => x !== modelId);
+
+        let userMsg;
+        if (r === 1) {
+          userMsg = `토론 주제: "${topic}"\n\n이 주제에 대한 당신의 핵심 입장과 논거를 제시하세요.`;
+        } else {
+          const othersContext = others
+            .filter(o => lastTexts[o])
+            .map(o => `${MODELS[o].name}의 주장:\n"${lastTexts[o]}"`)
+            .join('\n\n');
+          userMsg = `${othersContext}\n\n위 주장들에 응답하고 당신의 논거를 발전시키세요.`;
+        }
+
+        histories[modelId].push({ role: 'user', content: userMsg });
+
+        showThinking(modelId);
+        const reply = await callModel(modelId, histories[modelId]);
+        removeThinking();
+
+        histories[modelId].push({ role: 'assistant', content: reply });
+        lastTexts[modelId] = reply;
+        addMessage(modelId, reply, r);
+      }
+    }
+
+    // Summary — pick whichever model is available, prefer claude
+    const summaryModel = active.includes('claude') ? 'claude'
+                       : active.includes('gpt') ? 'gpt'
+                       : active[0];
+
+    const debate = active.map(m =>
+      `[${MODELS[m].name}] ${lastTexts[m] || ''}`
+    ).join('\n\n');
+
+    const sumPrompt = `다음은 여러 AI의 토론 최종 라운드 주장들입니다:\n\n${debate}\n\n이 토론을 중립적으로 종합하고 가장 균형 잡힌 결론을 4~6문장으로 정리해주세요.`;
+    const sumSystem = '당신은 공정한 토론 중재자입니다. 모든 관점을 종합해 균형 잡힌 결론을 도출합니다. 한국어로 답변하세요.';
+
+    showThinking(summaryModel);
+    const key = document.getElementById('key-' + summaryModel).value.trim();
+
+    let summary;
+    if (summaryModel === 'claude') {
+      summary = await callClaude(key, sumSystem, [{ role: 'user', content: sumPrompt }]);
+    } else if (summaryModel === 'gpt') {
+      summary = await callGPT(key, sumSystem, [{ role: 'user', content: sumPrompt }]);
+    } else {
+      summary = await callGemini(key, sumSystem, [{ role: 'user', content: sumPrompt }]);
+    }
+
+    removeThinking();
+    addSummary(summary);
+
+  } catch (err) {
+    removeThinking();
+    addError(err.message);
+  }
+
+  running = false;
+  document.getElementById('runBtn').disabled = false;
+}
+
+// Enter shortcut
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey && document.activeElement.id === 'topic') {
+    e.preventDefault();
+    runDebate();
+  }
+});
+</script>
+</body>
+</html>
